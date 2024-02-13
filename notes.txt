@@ -1,0 +1,4 @@
+yarn hardhat compile
+yarn hardhat test [./test/test-something.js]
+yarn hardhat coverage
+yarn hardhat run ./scripts/desploy.js --network sepolia

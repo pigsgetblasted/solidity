@@ -1,0 +1,12 @@
+.vscode
+node_modules
+artifacts
+build
+cache
+coverage
+
+.DS_Store
+.env.json
+.keys.json
+bookmarks.json
+coverage.json
