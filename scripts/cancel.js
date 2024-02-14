@@ -14,7 +14,7 @@ const Web3 = require( 'web3' );
     // const web3 = new Web3( `https://mainnet.infura.io/v3/${env.INFURA.PROJECT_ID}` );
     const web3 = new Web3( `https://sepolia.infura.io/v3/${env.INFURA.PROJECT_ID}` );
 
-    const PRIVATE_KEY = env.ACCOUNTS.SQUEEBO_2.PK;
+    const PRIVATE_KEY = env.ACCOUNTS.BLAST_PIGGIES.PK;
 		const account = web3.eth.accounts.privateKeyToAccount( PRIVATE_KEY );
 
     //const nonce = 6;

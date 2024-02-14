@@ -109,7 +109,7 @@ module.exports = {
         //   providerOrUrl: `https://goerli.base.org`,
 
         //   //Squeebo(2): 0x282D35Ee1b589F003db896b988fc59e2665Fa6a1
-        //   privateKeys: [ env.ACCOUNTS.SQUEEBO_2.PK ]
+        //   privateKeys: [ env.ACCOUNTS.BLAST_PIGGIES.PK ]
         // });
       },
       //gas:              5_000_000,
@@ -126,7 +126,7 @@ module.exports = {
           providerOrUrl: `wss://goerli.infura.io/ws/v3/${env.INFURA.PROJECT_ID}`,
 
           //Squeebo(2): 0x282D35Ee1b589F003db896b988fc59e2665Fa6a1
-          privateKeys: [ env.ACCOUNTS.SQUEEBO_2.PK ]
+          privateKeys: [ env.ACCOUNTS.BLAST_PIGGIES.PK ]
         });
       },
       //gas:              5_000_000,
@@ -143,7 +143,7 @@ module.exports = {
           providerOrUrl: `https://sepolia.infura.io/v3/${env.INFURA.PROJECT_ID}`,
 
           //Squeebo(2): 0x282D35Ee1b589F003db896b988fc59e2665Fa6a1
-          privateKeys: [ env.ACCOUNTS.SQUEEBO_2.PK ]
+          privateKeys: [ env.ACCOUNTS.BLAST_PIGGIES.PK ]
         });
       },
       //gas:            5_000_000,

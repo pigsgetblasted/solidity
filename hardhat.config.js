@@ -44,17 +44,6 @@ module.exports = {
       },
     },
 
-    "base-goerli": {
-      url: 'https://goerli.base.org',
-      accounts: [ env.ACCOUNTS.SQUEEBO_2.PK ],
-      gasPrice: 100_000_000,
-    },
-    "base-mainnet": {
-      url: 'https://mainnet.base.org',
-      accounts: [ env.ACCOUNTS.SQUEEBO_2.PK ],
-      // gasPrice: 1000000000,
-    },
-
     goerli: {
       url: `https://goerli.infura.io/v3/${env.INFURA.PROJECT_ID}`,
       accounts: []
@@ -63,14 +52,25 @@ module.exports = {
     sepolia: {
       url: `https://sepolia.infura.io/v3/${env.INFURA.PROJECT_ID}`,
       accounts: [
-        env.ACCOUNTS.SQUEEBO_2.PK,
+        env.ACCOUNTS.BLAST_PIGGIES.PK,
         // ...accounts.slice(2).map(acct => acct.privateKey)
       ]
     },
 
-    mainnet: {
-      url: `https://mainnet.infura.io/v3/${env.INFURA.PROJECT_ID}`,
-      accounts: []
+    "blast-mainnet": {
+      url: ``,
+      accounts: [
+        env.ACCOUNTS.BLAST_PIGGIES.PK,
+      ]
+    },
+    "blast-sepolia": {
+      // Chain ID: 168587773
+      // Block Explorer: https://testnet.blastscan.io
+      chainId: 168587773,
+      url: `https://sepolia.blast.io`,
+      accounts: [
+        env.ACCOUNTS.BLAST_PIGGIES.PK,
+      ]
     }
   },
   contractSizer: {

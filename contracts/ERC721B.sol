@@ -2,39 +2,54 @@
 // SPDX-License-Identifier: BSD-3
 pragma solidity ^0.8.9;
 
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
-import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
-import "@openzeppelin/contracts/utils/Context.sol";
-import "@openzeppelin/contracts/utils/introspection/ERC165.sol";
+import {IERC165, IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+import {IERC721Metadata} from "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
+import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+
+import {Context} from "@openzeppelin/contracts/utils/Context.sol";
+import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
 
-abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata {
-  struct Owner{
-    uint16 balance;
-    uint16 purchased;
-  }
+struct Owner{
+  uint16 balance;
+  uint16 burned;
+}
 
-  struct TokenRange{
-    uint16 lower;
-    uint16 current;
-    uint16 upper;
-    uint16 minted;
-  }
+struct Token{
+  uint256 value;
+  address owner; //160
+  uint64 mintTS;
+  uint64 burnTS;
+}
 
-  struct Token{
-    address owner; //160
-  }
+struct TokenRange{
+  uint16 lower;
+  uint16 current;
+  uint16 upper;
+  uint16 minted;
+}
 
-  mapping(uint256 => Token) public tokens;
-  mapping(address => Owner) public owners;
+enum TokenType {
+  NONE,
+  NUCLEAR,
+  LARGE,
+  MEDIUM,
+  SMALL
+}
+
+abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata, IERC721Errors {
   TokenRange public range = TokenRange(
-      1,
-      1,
-      0,
-      0
-    );
+    1001,
+    1001,
+    0,
+    0
+  );
+  
+  mapping(address => Owner) public owners;
+  mapping(TokenType => uint256) public prices;
+  mapping(uint256 => Token) public tokens;
+
   string private _name;
   string private _symbol;
 
@@ -48,7 +63,9 @@ abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata {
 
   //public view
   function balanceOf(address owner) public view returns( uint256 balance ){
-    require(owner != address(0), "ERC721B: balance query for the zero address");
+    if (owner == address(0))
+      revert ERC721InvalidOwner(address(0));
+
     return owners[owner].balance;
   }
 
@@ -61,7 +78,9 @@ abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata {
   }
 
   function ownerOf(uint256 tokenId) public view virtual returns(address owner){
-    require(_exists(tokenId), "ERC721B: query for nonexistent token");
+    if (!_exists(tokenId))
+      revert ERC721NonexistentToken(tokenId);
+
     return tokens[tokenId].owner;
   }
 
@@ -84,18 +103,16 @@ abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata {
   //approvals
   function approve(address operator, uint256 tokenId) public virtual{
     address owner = tokens[tokenId].owner;
-    require(operator != owner, "ERC721B: approval to current owner");
-
-    require(
-      _msgSender() == owner || isApprovedForAll(owner, _msgSender()),
-      "ERC721B: caller is not owner nor approved for all"
-    );
+    if (_msgSender() != owner && !isApprovedForAll(owner, _msgSender()))
+      revert ERC721InvalidApprover(_msgSender());
 
     _approve(operator, tokenId);
   }
 
   function getApproved(uint256 tokenId) public view returns( address approver ){
-    require(_exists(tokenId), "ERC721: query for nonexistent token");
+    if (!_exists(tokenId))
+      revert ERC721NonexistentToken(tokenId);
+
     return _tokenApprovals[tokenId];
   }
 
@@ -115,13 +132,16 @@ abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata {
   }
 
   function safeTransferFrom(address from, address to, uint256 tokenId, bytes memory _data) public virtual{
-    require(_isApprovedOrOwner(_msgSender(), tokenId), "ERC721B: caller is not owner nor approved");
+    if (!_isApprovedOrOwner(_msgSender(), tokenId))
+      revert ERC721InsufficientApproval(msg.sender, tokenId);
+
     _safeTransfer(from, to, tokenId, _data);
   }
 
   function transferFrom(address from, address to, uint256 tokenId) public virtual{
-    //solhint-disable-next-line max-line-length
-    require(_isApprovedOrOwner(_msgSender(), tokenId), "ERC721B: caller is not owner nor approved");
+    if (!_isApprovedOrOwner(_msgSender(), tokenId))
+      revert ERC721InsufficientApproval(msg.sender, tokenId);
+
     _transfer(from, to, tokenId);
   }
 
@@ -132,55 +152,53 @@ abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata {
     emit Approval(tokens[tokenId].owner, to, tokenId);
   }
 
-  // solhint-disable-next-line no-empty-blocks
-  function _beforeTokenTransfer(address from, address to, uint256 tokenId) internal virtual {}
-
-  function _burn(address from, uint256 tokenId) internal{
-    require(ownerOf(tokenId) == from, "ERC721B: burn of token that is not own");
-    
-    // Clear approvals
-    delete _tokenApprovals[tokenId];
-    _beforeTokenTransfer(from, address(0), tokenId);
+  function _burn(address from, uint256 tokenId) internal {
+    if (ownerOf(tokenId) != from)
+      revert ERC721InvalidOwner(from);
 
     _transfer(from, address(0), tokenId);
   }
 
-  function _checkOnERC721Received(address from, address to, uint256 tokenId, bytes memory _data) private returns( bool ){
+  function _checkOnERC721Received(address from, address to, uint256 tokenId, bytes memory _data) private {
     if (to.code.length > 0) {
       try IERC721Receiver(to).onERC721Received(_msgSender(), from, tokenId, _data) returns (bytes4 retval) {
-        return retval == IERC721Receiver.onERC721Received.selector;
+        if (retval != IERC721Receiver.onERC721Received.selector)
+          revert ERC721InvalidReceiver(to);
       } catch (bytes memory reason) {
         if (reason.length == 0) {
-          revert("ERC721B: transfer to non ERC721Receiver implementer");
+          revert ERC721InvalidReceiver(to);
         } else {
+          /// @solidity memory-safe-assembly
           // solhint-disable-next-line no-inline-assembly
           assembly {
             revert(add(32, reason), mload(reason))
           }
         }
       }
-    } else {
-      return true;
     }
   }
 
-  function _exists(uint256 tokenId) internal view returns( bool ){
-    return range.lower <= tokenId
-      && tokenId <= range.upper
-      && tokens[tokenId].owner != address(0);
+  function _exists(uint256 tokenId) internal view returns (bool) {
+    Token memory token = tokens[tokenId];
+    return token.mintTS > 0
+        && token.burnTS == 0
+        && tokens[tokenId].owner != address(0);
   }
 
   function _isApprovedOrOwner(address spender, uint256 tokenId) internal view returns( bool isApproved ){
-    require(_exists(tokenId), "ERC721B: query for nonexistent token");
+    if (!_exists(tokenId))
+      revert ERC721NonexistentToken(tokenId);
+
     address owner = tokens[tokenId].owner;
     return (spender == owner || getApproved(tokenId) == spender || isApprovedForAll(owner, spender));
   }
 
-  function _mintSequential(address recipient, uint16 quantity, bool isPurchase) internal{
-    _mintSequential(recipient, range.current, quantity, isPurchase);
+  function _mintSequential(uint16 quantity, TokenType tokenType, address recipient) internal{
+    _mintSequential(quantity, tokenType, recipient, range.current);
   }
 
-  function _mintSequential(address recipient, uint16 tokenId, uint16 quantity, bool isPurchase) internal{
+  function _mintSequential(uint16 quantity, TokenType tokenType, address recipient, uint16 tokenId) internal{
+    uint256 tokenValue = prices[tokenType];
     Owner memory prev = owners[recipient];
     TokenRange memory _range = range;
 
@@ -189,7 +207,7 @@ abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata {
     unchecked{
       owners[recipient] = Owner(
         prev.balance + quantity,
-        isPurchase ? prev.purchased + quantity : prev.purchased
+        prev.burned
       );
 
       range = TokenRange(
@@ -200,13 +218,18 @@ abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata {
       );
     }
 
-    for(; tokenId < endTokenId; ++tokenId ){
-      require(!_exists(tokenId), "ERC721B: Token exists");
-      tokens[ tokenId ] = Token(
-        recipient
+    for (; tokenId < endTokenId; ++tokenId) {
+      address currentOwner = ownerOf(tokenId);
+      if (currentOwner != address(0))
+        revert ERC721IncorrectOwner(address(this), tokenId, currentOwner);
+
+      tokens[tokenId] = Token(
+        tokenValue,
+        recipient,
+        uint64(block.timestamp),
+        0
       );
-      _beforeTokenTransfer(address(0), recipient, tokenId);
-      emit Transfer( address(0), recipient, tokenId );
+      emit Transfer(address(0), recipient, tokenId);
     }
   }
 
@@ -216,19 +239,34 @@ abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata {
 
   function _safeTransfer(address from, address to, uint256 tokenId, bytes memory _data) internal{
     _transfer(from, to, tokenId);
-    require(_checkOnERC721Received(from, to, tokenId, _data), "ERC721B: transfer to non ERC721Receiver implementer");
+    _checkOnERC721Received(from, to, tokenId, _data);
   }
 
   function _transfer(address from, address to, uint256 tokenId) internal virtual{
-    require(tokens[tokenId].owner == from, "ERC721B: transfer of token that is not own");
+    if (ownerOf(tokenId) != from)
+      revert ERC721InvalidOwner(from);
 
     // Clear approvals from the previous owner
     delete _tokenApprovals[tokenId];
-    _beforeTokenTransfer(from, to, tokenId);
 
     unchecked{
       --owners[from].balance;
       ++owners[to].balance;
+    }
+
+
+    Token memory prev = tokens[tokenId];
+    if (to == address(0)) {
+      ++owners[from].burned;
+      tokens[tokenId] = Token(
+        prev.value,
+        address(0),
+        prev.mintTS,
+        uint64(block.timestamp)
+      );
+    }
+    else {
+      tokens[tokenId].owner = to;
     }
 
     tokens[tokenId].owner = to;

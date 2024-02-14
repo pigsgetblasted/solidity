@@ -7,7 +7,7 @@ import {IERC721Enumerable} from "@openzeppelin/contracts/token/ERC721/extensions
 import {ERC721B} from "./ERC721B.sol";
 
 abstract contract ERC721EnumerableB is ERC721B, IERC721Enumerable {
-  //function balanceOf(address) public returns(uint256);
+  error ERC721OutOfBoundsIndex(address owner, uint256 index);
 
   function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721B, IERC165) returns(bool) {
     return interfaceId == type(IERC721Enumerable).interfaceId
@@ -15,7 +15,9 @@ abstract contract ERC721EnumerableB is ERC721B, IERC721Enumerable {
   }
 
   function tokenOfOwnerByIndex(address owner, uint256 index) external view returns(uint256) {
-    require(balanceOf(owner) > index, "ERC721EnumerableB: owner index out of bounds" );
+    if (balanceOf(owner) <= index)
+      revert ERC721OutOfBoundsIndex(owner, index);
+
 
     uint256 count;
     uint256 tokenId;
@@ -30,8 +32,11 @@ abstract contract ERC721EnumerableB is ERC721B, IERC721Enumerable {
   }
 
   function tokenByIndex(uint256 index) external view returns(uint256) {
-    require(_exists(index + range.lower), "ERC721EnumerableB: query for nonexistent token");
-    return range.lower + index;
+    uint256 tokenId = index + 1;
+    if (_exists(tokenId))
+      return tokenId;
+    else
+      revert ERC721NonexistentToken(tokenId);
   }
 
   function totalSupply() public view override(ERC721B, IERC721Enumerable) returns(uint256){

@@ -16,18 +16,18 @@ abstract contract ERC721Batch is ERC721EnumerableB, IERC721Batch {
   }
 
   function safeTransferBatch(address from, address to, uint256[] calldata tokenIds, bytes calldata data) external {
-    for(uint i; i < tokenIds.length; ++i){
+    for(uint256 i; i < tokenIds.length; ++i){
       safeTransferFrom(from, to, tokenIds[i], data);
     }
   }
 
   function transferBatch(address from, address to, uint256[] calldata tokenIds) external {
-    for(uint i; i < tokenIds.length; ++i){
+    for(uint256 i; i < tokenIds.length; ++i){
       transferFrom(from, to, tokenIds[i]);
     }
   }
 
-  function walletOfOwner(address account) external view returns(uint[] memory) {
+  function walletOfOwner(address account) external view returns(uint256[] memory) {
     uint256 count;
     uint256 quantity = owners[ account ].balance;
     uint256[] memory wallet = new uint256[](quantity);
