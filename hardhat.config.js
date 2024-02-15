@@ -32,15 +32,11 @@ module.exports = {
   },
   // ref: https://hardhat.org/hardhat-network/docs/reference
   networks: {
-    devnet: {
-      chainId: 160000,
-      url: "http://192.168.1.31:8545"
-    },
     hardhat: {
       // accounts: accounts,
       forking: {
-        enabled: false,
-        url: `https://mainnet.infura.io/v3/${env.INFURA.PROJECT_ID}`
+        enabled: true,
+        url: `https://sepolia.blast.io`
       },
     },
 
@@ -64,7 +60,6 @@ module.exports = {
       ]
     },
     "blast-sepolia": {
-      // Chain ID: 168587773
       // Block Explorer: https://testnet.blastscan.io
       chainId: 168587773,
       url: `https://sepolia.blast.io`,

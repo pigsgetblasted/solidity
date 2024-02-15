@@ -40,7 +40,7 @@ enum TokenType {
 
 abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata, IERC721Errors {
   TokenRange public range = TokenRange(
-    1001,
+    1,
     1001,
     0,
     0
@@ -152,11 +152,35 @@ abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata, IERC721E
     emit Approval(tokens[tokenId].owner, to, tokenId);
   }
 
-  function _burn(address from, uint256 tokenId) internal {
+  function _burn(uint256 tokenId) internal virtual{
+    address from = _ownerOf(tokenId);
+
+    unchecked{
+      --owners[from].balance;
+      ++owners[from].burned;
+      ++owners[address(0)].balance;
+    }
+
+    // Clear approvals from the previous owner
+    delete _tokenApprovals[tokenId];
+
+    Token memory prev = tokens[tokenId];
+    tokens[tokenId] = Token(
+      prev.value,
+      address(0),
+      prev.mintTS,
+      uint64(block.timestamp)
+    );
+
+    tokens[tokenId].owner = address(0);
+    emit Transfer(from, address(0), tokenId);
+  }
+
+  function _burnFrom(address from, uint256 tokenId) internal {
     if (ownerOf(tokenId) != from)
       revert ERC721InvalidOwner(from);
 
-    _transfer(from, address(0), tokenId);
+    _burn(tokenId);
   }
 
   function _checkOnERC721Received(address from, address to, uint256 tokenId, bytes memory _data) private {
@@ -185,7 +209,7 @@ abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata, IERC721E
         && tokens[tokenId].owner != address(0);
   }
 
-  function _isApprovedOrOwner(address spender, uint256 tokenId) internal view returns( bool isApproved ){
+  function _isApprovedOrOwner(address spender, uint256 tokenId) internal view returns(bool isApproved) {
     if (!_exists(tokenId))
       revert ERC721NonexistentToken(tokenId);
 
@@ -193,11 +217,11 @@ abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata, IERC721E
     return (spender == owner || getApproved(tokenId) == spender || isApprovedForAll(owner, spender));
   }
 
-  function _mintSequential(uint16 quantity, TokenType tokenType, address recipient) internal{
+  function _mintSequential(uint16 quantity, TokenType tokenType, address recipient) internal {
     _mintSequential(quantity, tokenType, recipient, range.current);
   }
 
-  function _mintSequential(uint16 quantity, TokenType tokenType, address recipient, uint16 tokenId) internal{
+  function _mintSequential(uint16 quantity, TokenType tokenType, address recipient, uint16 tokenId) internal {
     uint256 tokenValue = prices[tokenType];
     Owner memory prev = owners[recipient];
     TokenRange memory _range = range;
@@ -211,16 +235,16 @@ abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata, IERC721E
       );
 
       range = TokenRange(
-        _range.lower > tokenId ? tokenId : _range.lower,
-        endTokenId,
-        _range.upper < endTokenId ? endTokenId : _range.upper,
+        _range.lower < tokenId ? _range.lower : tokenId,
+        _range.current > endTokenId ? _range.current : endTokenId,
+        _range.upper > endTokenId ? _range.upper : endTokenId,
         _range.minted + quantity
       );
     }
 
     for (; tokenId < endTokenId; ++tokenId) {
-      address currentOwner = ownerOf(tokenId);
-      if (currentOwner != address(0))
+      address currentOwner = _ownerOf(tokenId);
+      if (tokens[tokenId].owner != address(0))
         revert ERC721IncorrectOwner(address(this), tokenId, currentOwner);
 
       tokens[tokenId] = Token(
@@ -233,18 +257,22 @@ abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata, IERC721E
     }
   }
 
-  function _next() internal virtual returns(uint256 current){
+  function _next() internal virtual returns (uint256 current) {
     return range.current;
   }
 
-  function _safeTransfer(address from, address to, uint256 tokenId, bytes memory _data) internal{
-    _transfer(from, to, tokenId);
+  function _ownerOf(uint256 tokenId) internal view virtual returns (address) {
+    return tokens[tokenId].owner;
+  }
+
+  function _safeTransfer(address from, address to, uint256 tokenId, bytes memory _data) internal {
+    _transferFrom(from, to, tokenId);
     _checkOnERC721Received(from, to, tokenId, _data);
   }
 
-  function _transfer(address from, address to, uint256 tokenId) internal virtual{
-    if (ownerOf(tokenId) != from)
-      revert ERC721InvalidOwner(from);
+  function _transfer(address from, address to, uint256 tokenId) internal virtual {
+    if (to == address(0))
+      revert ERC721InvalidReceiver(address(0));
 
     // Clear approvals from the previous owner
     delete _tokenApprovals[tokenId];
@@ -254,41 +282,14 @@ abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata, IERC721E
       ++owners[to].balance;
     }
 
-
-    Token memory prev = tokens[tokenId];
-    if (to == address(0)) {
-      ++owners[from].burned;
-      tokens[tokenId] = Token(
-        prev.value,
-        address(0),
-        prev.mintTS,
-        uint64(block.timestamp)
-      );
-    }
-    else {
-      tokens[tokenId].owner = to;
-    }
-
     tokens[tokenId].owner = to;
     emit Transfer(from, to, tokenId);
   }
 
-  function _updateRange(uint256 tokenId) private{
-    TokenRange memory prev = range;
-    ++prev.minted;
+  function _transferFrom(address from, address to, uint256 tokenId) internal virtual {
+    if (ownerOf(tokenId) != from)
+      revert ERC721InvalidOwner(from);
 
-    if( tokenId <= prev.current )
-      ++prev.current;
-
-    if( tokenId > prev.upper )
-      prev.upper = uint16(tokenId + 1);
-
-
-    range = TokenRange(
-      prev.current,
-      prev.minted,
-      prev.lower,
-      prev.upper
-    );
+    _transfer(from, to, tokenId);
   }
 }

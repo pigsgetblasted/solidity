@@ -4,7 +4,8 @@ pragma solidity ^0.8.20;
 
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
-import {IERC20Rebasing, YieldMode} from "./IBlast.sol";
+import {IBlast} from "./IBlast.sol";
+import {IERC20Rebasing, YieldMode} from "./IERC20Rebasing.sol";
 
 import {ERC721B, TokenType} from "./ERC721B.sol";
 import {ERC721EnumerableB} from "./ERC721EnumerableB.sol";
@@ -16,11 +17,12 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
   error NotAuthorized();
   error NoBalance();
   error OrderExceedsSupply();
+  error PaymentFailed();
   error UnsupportedTokenType(uint8);
   error WithdrawError(bytes);
 
   uint16 public constant MAX_NUKES = 1000;
-  IERC20Rebasing public constant BLAST = IERC20Rebasing(0x4300000000000000000000000000000000000002);
+  IBlast public constant BLAST = IBlast(0x4300000000000000000000000000000000000002);
   IERC20Rebasing public constant WETH = IERC20Rebasing(0x4200000000000000000000000000000000000023);
 
   uint16 public feePercent = 5;
@@ -28,11 +30,19 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
   string public tokenURIPrefix;
   string public tokenURISuffix;
 
+
+  // TODO: enable / disable mint
+
   constructor()
   ERC721B("PIGGYBOMBS", "PIGGYBOMBS")
   {
-    BLAST.configure(YieldMode.CLAIMABLE);
+    // BLAST.configureClaimableYield();
     WETH.configure(YieldMode.CLAIMABLE);
+
+    prices[TokenType.NUCLEAR] = 0.25 ether;
+    prices[TokenType.LARGE] = 0.1 ether;
+    prices[TokenType.MEDIUM] = 0.1 ether;
+    prices[TokenType.SMALL] = 0.03 ether;
   }
 
   function burn(uint16[] calldata tokenIds) external {
@@ -40,7 +50,7 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
     uint256 count = tokenIds.length;
     for(uint256 i = 0; i < count; ++i) {
       wethValue += tokens[tokenIds[i]].value;
-      _burn(msg.sender, tokenIds[i]);
+      _burnFrom(msg.sender, tokenIds[i]);
 
       // TODO: emit burn
     }
@@ -50,22 +60,19 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
 
   function mint(uint16 quantity, TokenType tokenType, bytes32[] memory proof) external payable {
     // checks
-    if (tokenType == TokenType.NONE)
+    if (tokenType == TokenType.NONE || uint8(tokenType) >= 5)
       revert UnsupportedTokenType(uint8(tokenType));
 
     uint256 basePrice = prices[tokenType] * quantity;
     uint256 totalPrice = basePrice + feePercent * basePrice / 100;
-    if (msg.value != totalPrice)
-      revert InvalidPayment();
-
-
     if (tokenType == TokenType.NUCLEAR) {
       if (nextNuke + quantity > MAX_NUKES)
         revert OrderExceedsSupply();
 
-      bytes32 leaf = keccak256(abi.encodePacked(msg.sender));
-      if(!_isValidProof(leaf, proof))
-        revert NotAuthorized();
+      // TODO: mint limits
+      // bytes32 leaf = keccak256(abi.encodePacked(msg.sender));
+      // if(!_isValidProof(leaf, proof))
+      //   revert NotAuthorized();
 
       uint16 firstTokenId = nextNuke;
 
@@ -73,13 +80,17 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
       nextNuke += quantity;
 
       // interactions
-      WETH.transferFrom(msg.sender, address(this), totalPrice);
-      _mintSequential(quantity, tokenType, msg.sender, firstTokenId);
+      if (WETH.transferFrom(msg.sender, address(this), totalPrice))
+        _mintSequential(quantity, tokenType, msg.sender, firstTokenId);
+      else
+        revert PaymentFailed();
     }
     else {
       // interactions
-      WETH.transferFrom(msg.sender, address(this), totalPrice);
-      _mintSequential(quantity, tokenType, msg.sender);
+      if (WETH.transferFrom(msg.sender, address(this), totalPrice))
+        _mintSequential(quantity, tokenType, msg.sender);
+      else
+        revert PaymentFailed();
     }
   }
 
@@ -119,19 +130,21 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
 
 
   function withdrawETH(address to) external onlyEOADelegates {
-    uint256 amount = BLAST.getClaimableAmount(address(this));
-    BLAST.claim(to, amount);
+    BLAST.claimAllYield(address(this), to);
   }
 
   function withdrawWETH(address to) external onlyEOADelegates {
     uint256 amount = WETH.getClaimableAmount(address(this));
     WETH.claim(to, amount);
+
+    uint256 balance = WETH.balanceOf(address(this));
+    WETH.transfer(to, balance);
   }
 
 
   // view
   function getClaimableETH() public view returns (uint256) {
-    return BLAST.getClaimableAmount(address(this));
+    return BLAST.readClaimableYield(address(this));
   }
 
   function getClaimableWETH() public view returns (uint256) {

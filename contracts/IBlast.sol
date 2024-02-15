@@ -2,14 +2,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {IERC20Rebasing, YieldMode} from "./IERC20Rebasing.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {YieldMode} from "./IERC20Rebasing.sol";
 
 enum GasMode {
     VOID,
     CLAIMABLE 
 }
 
-interface IBlast is IERC20Rebasing{
+interface IBlast is IERC20{
     // configure
     function configureContract(address contractAddress, YieldMode _yield, GasMode gasMode, address governor) external;
     function configure(YieldMode _yield, GasMode gasMode, address governor) external;
