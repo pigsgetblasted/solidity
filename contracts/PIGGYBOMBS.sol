@@ -11,13 +11,22 @@ import {ERC721B, TokenType} from "./ERC721B.sol";
 import {ERC721EnumerableB} from "./ERC721EnumerableB.sol";
 import {Merkle2} from "./Merkle2.sol";
 
+enum SaleState {
+  NONE,
+  ALLOWLIST,
+  PUBLIC,
+  BOTH
+}
+
 contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
   error InvalidPayment();
   error InvalidPriceCount();
   error NotAuthorized();
   error NoBalance();
+  error OrderExceedsAllowance();
   error OrderExceedsSupply();
   error PaymentFailed();
+  error SalesClosed(SaleState);
   error UnsupportedTokenType(uint8);
   error WithdrawError(bytes);
 
@@ -27,6 +36,8 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
 
   uint16 public feePercent = 5;
   uint16 public nextNuke = 1;
+  uint16 public nukeLimit = 1;
+  SaleState public saleState = SaleState.NONE;
   string public tokenURIPrefix;
   string public tokenURISuffix;
 
@@ -39,10 +50,10 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
     // BLAST.configureClaimableYield();
     WETH.configure(YieldMode.CLAIMABLE);
 
-    prices[TokenType.NUCLEAR] = 0.25 ether;
-    prices[TokenType.LARGE] = 0.1 ether;
-    prices[TokenType.MEDIUM] = 0.1 ether;
-    prices[TokenType.SMALL] = 0.03 ether;
+    prices[TokenType.NUCLEAR] = 0.10 ether;
+    prices[TokenType.LARGE]   = 0.25 ether;
+    prices[TokenType.MEDIUM]  = 0.10 ether;
+    prices[TokenType.SMALL]   = 0.03 ether;
   }
 
   function burn(uint16[] calldata tokenIds) external {
@@ -59,20 +70,28 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
   }
 
   function mint(uint16 quantity, TokenType tokenType, bytes32[] memory proof) external payable {
-    // checks
+    if (saleState == SaleState.NONE)
+      revert SalesClosed(SaleState.NONE);
+
     if (tokenType == TokenType.NONE || uint8(tokenType) >= 5)
       revert UnsupportedTokenType(uint8(tokenType));
 
     uint256 basePrice = prices[tokenType] * quantity;
     uint256 totalPrice = basePrice + feePercent * basePrice / 100;
     if (tokenType == TokenType.NUCLEAR) {
+      if (!(saleState == SaleState.ALLOWLIST || saleState == SaleState.BOTH))
+        revert SalesClosed(SaleState.ALLOWLIST);
+
+      if (owners[msg.sender].nuclear + quantity > nukeLimit)
+        revert OrderExceedsAllowance();
+
       if (nextNuke + quantity > MAX_NUKES)
         revert OrderExceedsSupply();
 
       // TODO: mint limits
-      // bytes32 leaf = keccak256(abi.encodePacked(msg.sender));
-      // if(!_isValidProof(leaf, proof))
-      //   revert NotAuthorized();
+      bytes32 leaf = keccak256(abi.encodePacked(msg.sender));
+      if(!_isValidProof(leaf, proof))
+        revert NotAuthorized();
 
       uint16 firstTokenId = nextNuke;
 
@@ -86,6 +105,9 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
         revert PaymentFailed();
     }
     else {
+      if (!(saleState == SaleState.PUBLIC || saleState == SaleState.BOTH))
+        revert SalesClosed(SaleState.PUBLIC);
+
       // interactions
       if (WETH.transferFrom(msg.sender, address(this), totalPrice))
         _mintSequential(quantity, tokenType, msg.sender);
@@ -100,6 +122,10 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
     feePercent = _pct;
   }
 
+  function setNuclearLimit(uint16 limit) external onlyEOADelegates {
+    nukeLimit = limit;
+  }
+
   function setPrices(uint256[] calldata newPrices) external onlyEOADelegates {
     uint256 count = newPrices.length;
     if (count > uint256(type(TokenType).max))
@@ -109,6 +135,11 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
     for(uint256 i = 1; i < count; ++i){
       prices[TokenType(i)] = newPrices[i];
     }
+  }
+
+  function setSaleState(SaleState newState) external onlyEOADelegates {
+    if (newState <= type(SaleState).max)
+      saleState = newState;
   }
 
   function setTokenURI(

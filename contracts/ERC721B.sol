@@ -14,6 +14,7 @@ import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 struct Owner{
   uint16 balance;
   uint16 burned;
+  uint16 nuclear;
 }
 
 struct Token{
@@ -231,7 +232,8 @@ abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata, IERC721E
     unchecked{
       owners[recipient] = Owner(
         prev.balance + quantity,
-        prev.burned
+        prev.burned,
+        prev.nuclear + (tokenType == TokenType.NUCLEAR ? quantity : 0)
       );
 
       range = TokenRange(

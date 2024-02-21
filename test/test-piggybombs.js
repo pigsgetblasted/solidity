@@ -1,20 +1,22 @@
 
 const {assert, ethers, Web3} = require("hardhat");
 const log4js = require("log4js");
+const Merkle = require("./lib/merkle");
 
-const Provider = require("./lib/provider");
+// const Provider = require("./lib/provider");
 
-const hardhatProvider = ethers.provider._hardhatProvider;
-const web3client = new Web3(hardhatProvider);
-const ethersClient = new ethers.providers.Web3Provider(hardhatProvider);
+// const hardhatProvider = ethers.provider._hardhatProvider;
+// const web3client = new Web3(hardhatProvider);
+// const ethersClient = new ethers.providers.Web3Provider(hardhatProvider);
+const merkle = new Merkle();
 
 let logging = console;
 
-contract( 'PIGGYBOMBS', (accts) => {
+contract("PIGGYBOMBS", (accts) => {
   let owner, ownerSigner;
   const accounts = [];
   const signers = [];
-  
+
   it("configures logging", async () => {
     log4js.configure({
       disableClustering: true,
@@ -53,6 +55,10 @@ contract( 'PIGGYBOMBS', (accts) => {
     ownerSigner = signers.shift();
   });
 
+  it("loads merkle tree", () => {
+    merkle.load(accounts.slice(0,9));
+  });
+
   let piggies;
   it("deploys PIGGYBOMBS", async () => {
     try{
@@ -65,7 +71,6 @@ contract( 'PIGGYBOMBS', (accts) => {
     }
   });
 
-
   let weth;
   it("loads WETH", async () => {
     const wethABI = require('./abi/WETH.json');
@@ -74,21 +79,32 @@ contract( 'PIGGYBOMBS', (accts) => {
     weth = new ethers.Contract(wethAddress, wethABI, ownerSigner);
   });
 
-
   after(() => {
     if(!piggies)
       assert.fail("PIGGYBOMBS (PIGGYBOMBS) not deployed");
 
 
-    describe("Greenfield", function(){
+    describe("Greenfield Allowlist", function(){
+      it("set merkle", async () => {
+        const hexRoot = merkle.getHexRoot()
+        await piggies.connect(ownerSigner).setMerkleRoot(hexRoot);
+      });
+
+      it("open sales", async () => {
+        await piggies.connect(ownerSigner).setSaleState(1);
+      });
+
       it("must approve weth", async () => {
         const signer = signers[0];
         let wethBalance = await weth.balanceOf(signer.address);
-        logging.log({ 1: wethBalance }); // 0
+        assert.equal(wethBalance, 0);
 
 
         try{
-          await piggies.connect(signer).mint(1, 1, []);
+          const proof = merkle.getProof(signer.address);
+          // console.log({proof});
+
+          await piggies.connect(signer).mint(1, 1, proof);
           assert.fail("WETH not approved");
         }
         catch(err){
@@ -97,17 +113,19 @@ contract( 'PIGGYBOMBS', (accts) => {
         }
       });
 
-
       it("must have enough weth", async () => {
         const signer = signers[0];
         // approve
         await weth.connect(signer).approve(piggies.address, '1000000000000000000');
 
-        let wethBalance = await weth.balanceOf(signer.address);
-        logging.log({ 1: wethBalance }); // 0
+        const wethBalance = await weth.balanceOf(signer.address);
+        assert.equal(wethBalance, 0);
 
         try{
-          await piggies.connect(signer).mint(1, 1, []);
+          const proof = merkle.getProof(signer.address);
+          // console.log({proof});
+
+          await piggies.connect(signer).mint(1, 1, proof);
           assert.fail("unsifficient WETH");
         }
         catch(err){
@@ -116,9 +134,8 @@ contract( 'PIGGYBOMBS', (accts) => {
         }
       });
 
-
-      it("mint and burn nuclear", async () => {
-        const signer = signers[0];
+      it("must be allowlist", async () => {
+        const signer = signers[10];
 
         // deposit 1 ether
         await weth.connect(signer).deposit({
@@ -128,23 +145,54 @@ contract( 'PIGGYBOMBS', (accts) => {
         // approve
         await weth.connect(signer).approve(piggies.address, '1000000000000000000');
 
+        const wethBalance = await weth.balanceOf(signer.address);
+        assert.equal(wethBalance, '1000000000000000000');
+
+
+        try{
+          const proof = merkle.getProof(signer.address);
+          // console.log({proof});
+
+          await piggies.connect(signer).mint(1, 1, proof);
+          assert.fail("not allowlisted");
+        }
+        catch(err){
+          // logging.warn({ err });
+          assert.include(String(err), "NotAuthorized()");
+        }
+      });
+
+      it("mint nuclear", async () => {
+        const signer = signers[0];
+
+        // deposit 1 ether
+        await weth.connect(signer).deposit({
+          value: '1000000000000000000'
+        });
+
+
         let wethBalance = await weth.balanceOf(signer.address);
-        logging.log({ 1: wethBalance }); // 1000000000000000000
+        assert.equal(wethBalance, '1000000000000000000');
 
+        const proof = merkle.getProof(signer.address);
+        // console.log({proof});
 
-        let txn = await piggies.connect(signer).mint(1, 1, []);
-        let rcpt = await txn.wait();
+        const txn = await piggies.connect(signer).mint(1, 1, proof);
+        // let rcpt = await txn.wait();
         // logging.warn(rcpt.logs);
 
         wethBalance = await weth.balanceOf(signer.address);
-        logging.log({ 2: wethBalance }); //  737500000000000000
+        assert.equal(wethBalance, '895000000000000000');
+      });
 
-        txn = await piggies.connect(signer).burn([1]);
-        rcpt = await txn.wait();
+      it("burn nuclear", async () => {
+        const signer = signers[0];
+        const txn = await piggies.connect(signer).burn([1]);
+        // rcpt = await txn.wait();
         // logging.warn(rcpt.logs);
 
-        wethBalance = await weth.balanceOf(signer.address);
-        logging.log({ 3: wethBalance }); //  987500000000000000
+        const wethBalance = await weth.balanceOf(signer.address);
+        assert.equal(wethBalance, '995000000000000000');
 
 
         try{
@@ -156,7 +204,6 @@ contract( 'PIGGYBOMBS', (accts) => {
           assert.include(String(err), "ERC721NonexistentToken(1)");
         }
       });
-
 
       it("mint and burn nuclear 2", async () => {
         const signer = signers[1];
@@ -170,30 +217,33 @@ contract( 'PIGGYBOMBS', (accts) => {
         await weth.connect(signer).approve(piggies.address, '1000000000000000000');
 
         let wethBalance = await weth.balanceOf(signer.address);
-        logging.log({ 1: wethBalance }); // 1000000000000000000
+        assert.equal(wethBalance, '1000000000000000000');
 
 
-        let txn = await piggies.connect(signer).mint(2, 1, []);
+        try{
+          const proof = merkle.getProof(signer.address);
+          await piggies.connect(signer).mint(2, 1, proof);
+        }
+        catch(err){
+          // logging.warn({ err });
+          assert.include(String(err), "OrderExceedsAllowance()");
+        }
+
+
+        const proof = merkle.getProof(signer.address);
+        let txn = await piggies.connect(signer).mint(1, 1, proof);
         // let rcpt = await txn.wait();
         // logging.warn(rcpt.logs);
 
         wethBalance = await weth.balanceOf(signer.address);
-        logging.log({ 2: wethBalance }); //  475000000000000000
+        assert.equal(wethBalance, '895000000000000000');
 
         txn = await piggies.connect(signer).burn([2]);
         // rcpt = await txn.wait();
         // logging.warn(rcpt.logs);
 
         wethBalance = await weth.balanceOf(signer.address);
-        logging.log({ 3: wethBalance }); //  725000000000000000
-
-
-        txn = await piggies.connect(signer).burn([3]);
-        // rcpt = await txn.wait();
-        // logging.warn(rcpt.logs);
-
-        wethBalance = await weth.balanceOf(signer.address);
-        logging.log({ 3: wethBalance }); //  975000000000000000
+        assert.equal(wethBalance, '995000000000000000');
 
 
         try{
@@ -205,7 +255,36 @@ contract( 'PIGGYBOMBS', (accts) => {
           assert.include(String(err), "ERC721NonexistentToken(2)");
         }
       });
+    });
 
+    describe("Greenfield Public", function(){
+      it("mint public", async () => {
+        const signer = signers[10];
+
+        // deposit 1 ether
+        await weth.connect(signer).deposit({
+          value: '1000000000000000000'
+        });
+
+        // approve
+        await weth.connect(signer).approve(piggies.address, '1000000000000000000');
+
+        try{
+          const proof = merkle.getProof(signer.address);
+          console.log({proof});
+
+          await piggies.connect(signer).mint(2, 2, proof);
+          assert.fail("sales closed");
+        }
+        catch(err){
+          // logging.warn({ err });
+          assert.include(String(err), "SalesClosed(2)");
+        }
+      });
+
+      it("open sales", async () => {
+        await piggies.connect(ownerSigner).setSaleState(3);
+      });
 
       it("mint and burn large", async () => {
         const signer = signers[2];
@@ -219,22 +298,22 @@ contract( 'PIGGYBOMBS', (accts) => {
         await weth.connect(signer).approve(piggies.address, '1000000000000000000');
 
         let wethBalance = await weth.balanceOf(signer.address);
-        logging.log({ 1: wethBalance }); // 1000000000000000000
+        assert.equal(wethBalance, '1000000000000000000');
 
 
-        let txn = await piggies.connect(signer).mint(1, 3, []);
-        let rcpt = await txn.wait();
+        let txn = await piggies.connect(signer).mint(1, 2, []);
+        // let rcpt = await txn.wait();
         // logging.warn(rcpt.logs);
 
         wethBalance = await weth.balanceOf(signer.address);
-        logging.log({ 2: wethBalance }); //  895000000000000000
+        assert.equal(wethBalance, '737500000000000000');
 
         txn = await piggies.connect(signer).burn([1001]);
-        rcpt = await txn.wait();
+        // rcpt = await txn.wait();
         // logging.warn(rcpt.logs);
 
         wethBalance = await weth.balanceOf(signer.address);
-        logging.log({ 3: wethBalance }); //  995000000000000000
+        assert.equal(wethBalance, '987500000000000000');
 
 
         try{
@@ -246,15 +325,20 @@ contract( 'PIGGYBOMBS', (accts) => {
           assert.include(String(err), "ERC721NonexistentToken(1001)");
         }
       });
+    });
 
+    describe("Withdraw", function(){
       it("can withdraw WETH", async () => {
         let wethBalance = await weth.balanceOf(piggies.address);
-        logging.log({ 1: wethBalance }); //  
-
-        await piggies.connect(ownerSigner).withdrawWETH(accounts[10]);
-
+        assert.equal(wethBalance, '22500000000000000');
+  
+        await piggies.connect(ownerSigner).withdrawWETH(accounts[15]);
+  
         wethBalance = await weth.balanceOf(piggies.address);
-        logging.log({ 2: wethBalance }); //  
+        assert.equal(wethBalance, '0');
+  
+        wethBalance = await weth.balanceOf(accounts[15]);
+        assert.equal(wethBalance, '22500000000000000');
       });
     });
   });
