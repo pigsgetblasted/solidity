@@ -7,7 +7,7 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {IBlast} from "./IBlast.sol";
 import {IERC20Rebasing, YieldMode} from "./IERC20Rebasing.sol";
 
-import {ERC721B, TokenType} from "./ERC721B.sol";
+import {ERC721B, Token, TokenType} from "./ERC721B.sol";
 import {ERC721EnumerableB} from "./ERC721EnumerableB.sol";
 import {Merkle2} from "./Merkle2.sol";
 
@@ -183,8 +183,10 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
   }
 
   function tokenURI(uint256 tokenId) public override view returns(string memory){
-    if(_exists(tokenId))
-      return string.concat(tokenURIPrefix, Strings.toString(tokenId), tokenURISuffix);
+    if(_exists(tokenId)) {
+      Token memory token = tokens[tokenId];
+      return string.concat(tokenURIPrefix, Strings.toString(uint8(token.tokenType)), tokenURISuffix);
+    }
     else
       revert ERC721NonexistentToken(tokenId);
   }

@@ -10,6 +10,13 @@ import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.s
 import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
+enum TokenType {
+  NONE,
+  NUCLEAR,
+  LARGE,
+  MEDIUM,
+  SMALL
+}
 
 struct Owner{
   uint16 balance;
@@ -20,8 +27,9 @@ struct Owner{
 struct Token{
   uint256 value;
   address owner; //160
-  uint64 mintTS;
-  uint64 burnTS;
+  uint32 mintTS;
+  uint32 burnTS;
+  TokenType tokenType;
 }
 
 struct TokenRange{
@@ -31,13 +39,6 @@ struct TokenRange{
   uint16 minted;
 }
 
-enum TokenType {
-  NONE,
-  NUCLEAR,
-  LARGE,
-  MEDIUM,
-  SMALL
-}
 
 abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata, IERC721Errors {
   TokenRange public range = TokenRange(
@@ -170,7 +171,8 @@ abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata, IERC721E
       prev.value,
       address(0),
       prev.mintTS,
-      uint64(block.timestamp)
+      uint32(block.timestamp),
+      prev.tokenType
     );
 
     tokens[tokenId].owner = address(0);
@@ -252,8 +254,9 @@ abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata, IERC721E
       tokens[tokenId] = Token(
         tokenValue,
         recipient,
-        uint64(block.timestamp),
-        0
+        uint32(block.timestamp),
+        0,
+        tokenType
       );
       emit Transfer(address(0), recipient, tokenId);
     }
