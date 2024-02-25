@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 import {IBlast} from "./IBlast.sol";
-import {IERC20Rebasing, YieldMode} from "./IERC20Rebasing.sol";
+// import {IERC20Rebasing, YieldMode} from "./IERC20Rebasing.sol";
 
 import {ERC721B, Token, TokenType} from "./ERC721B.sol";
 import {ERC721EnumerableB} from "./ERC721EnumerableB.sol";
@@ -32,7 +33,6 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
 
   uint16 public constant MAX_NUKES = 1000;
   IBlast public constant BLAST = IBlast(0x4300000000000000000000000000000000000002);
-  IERC20Rebasing public constant WETH = IERC20Rebasing(0x4200000000000000000000000000000000000023);
 
   uint16 public feePercent = 5;
   uint16 public nextNuke = 1;
@@ -45,10 +45,10 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
   // TODO: enable / disable mint
 
   constructor()
-  ERC721B("PIGGYBOMBS", "PIGGYBOMBS")
+  ERC721B("PIGS GET BLASTED", "PIGGYBOMB")
   {
+    BLAST.configureClaimableGas();
     // BLAST.configureClaimableYield();
-    WETH.configure(YieldMode.CLAIMABLE);
 
     prices[TokenType.NUCLEAR] = 0.10 ether;
     prices[TokenType.LARGE]   = 0.25 ether;
@@ -57,16 +57,14 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
   }
 
   function burn(uint16[] calldata tokenIds) external {
-    uint256 wethValue = 0;
+    uint256 totalValue = 0;
     uint256 count = tokenIds.length;
     for(uint256 i = 0; i < count; ++i) {
-      wethValue += tokens[tokenIds[i]].value;
+      totalValue += tokens[tokenIds[i]].value;
       _burnFrom(msg.sender, tokenIds[i]);
-
-      // TODO: emit burn
     }
 
-    WETH.transfer(msg.sender, wethValue);
+    Address.sendValue(payable(msg.sender), totalValue);
   }
 
   function mint(uint16 quantity, TokenType tokenType, bytes32[] memory proof) external payable {
@@ -76,8 +74,9 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
     if (tokenType == TokenType.NONE || uint8(tokenType) >= 5)
       revert UnsupportedTokenType(uint8(tokenType));
 
-    uint256 basePrice = prices[tokenType] * quantity;
-    uint256 totalPrice = basePrice + feePercent * basePrice / 100;
+    uint256 totalPrice = prices[tokenType] * quantity;
+    uint256 totalFee = totalPrice * 5 / 100;
+    uint256 totalValue = totalPrice + totalFee;
     if (tokenType == TokenType.NUCLEAR) {
       if (!(saleState == SaleState.ALLOWLIST || saleState == SaleState.BOTH))
         revert SalesClosed(SaleState.ALLOWLIST);
@@ -88,31 +87,27 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
       if (nextNuke + quantity > MAX_NUKES)
         revert OrderExceedsSupply();
 
-      // TODO: mint limits
+      if (msg.value != totalValue)
+        revert InvalidPayment();
+
       bytes32 leaf = keccak256(abi.encodePacked(msg.sender));
       if(!_isValidProof(leaf, proof))
         revert NotAuthorized();
 
       uint16 firstTokenId = nextNuke;
 
-      // effects
       nextNuke += quantity;
 
-      // interactions
-      if (WETH.transferFrom(msg.sender, address(this), totalPrice))
-        _mintSequential(quantity, tokenType, msg.sender, firstTokenId);
-      else
-        revert PaymentFailed();
+      _mintSequential(quantity, tokenType, msg.sender, firstTokenId);
     }
     else {
       if (!(saleState == SaleState.PUBLIC || saleState == SaleState.BOTH))
         revert SalesClosed(SaleState.PUBLIC);
 
-      // interactions
-      if (WETH.transferFrom(msg.sender, address(this), totalPrice))
-        _mintSequential(quantity, tokenType, msg.sender);
-      else
-        revert PaymentFailed();
+      if (msg.value != totalValue)
+        revert InvalidPayment();
+
+      _mintSequential(quantity, tokenType, msg.sender, range.current);
     }
   }
 
@@ -150,26 +145,20 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
     tokenURISuffix = suffix;
   }
 
-  function withdraw() external onlyOwner {
-    if(address(this).balance == 0)
+  function withdraw(address payable to) external onlyOwner {
+    uint256 amount = address(this).balance;
+    if(amount > 0)
+      Address.sendValue(to, amount);
+    else
       revert NoBalance();
-
-    (bool success, bytes memory data) = payable(owner()).call{ value: address(this).balance }("");
-    if(!success)
-      revert WithdrawError(data);
   }
-
 
   function withdrawETH(address to) external onlyEOADelegates {
     BLAST.claimAllYield(address(this), to);
   }
 
-  function withdrawWETH(address to) external onlyEOADelegates {
-    uint256 amount = WETH.getClaimableAmount(address(this));
-    WETH.claim(to, amount);
-
-    uint256 balance = WETH.balanceOf(address(this));
-    WETH.transfer(to, balance);
+  function withdrawGas(address to) external onlyEOADelegates {
+    BLAST.claimAllGas(address(this), to);
   }
 
 
@@ -178,8 +167,10 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
     return BLAST.readClaimableYield(address(this));
   }
 
-  function getClaimableWETH() public view returns (uint256) {
-    return WETH.getClaimableAmount(address(this));
+  function getClaimableGas() public view returns (uint256) {
+    uint256 etherBalance;
+    (, etherBalance, , ) = BLAST.readGasParams(address(this));
+    return etherBalance;
   }
 
   function tokenURI(uint256 tokenId) public override view returns(string memory){

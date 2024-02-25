@@ -1,16 +1,26 @@
 
-const {assert, ethers, Web3} = require("hardhat");
+const {assert, ethers, Web3, web3} = require("hardhat");
 const log4js = require("log4js");
 const Merkle = require("./lib/merkle");
 
 // const Provider = require("./lib/provider");
 
-// const hardhatProvider = ethers.provider._hardhatProvider;
-// const web3client = new Web3(hardhatProvider);
+const hardhatProvider = ethers.provider._hardhatProvider;
+const web3client = new Web3(hardhatProvider);
 // const ethersClient = new ethers.providers.Web3Provider(hardhatProvider);
 const merkle = new Merkle();
 
 let logging = console;
+
+const GWEI = BigInt(1_000_000_000);
+const ETHER = GWEI * GWEI;
+const DEFAULT_BALANCE = BigInt(10_000) * ETHER;
+
+const NUCLEAR     = BigInt(100_000_000) * GWEI;
+const NUCLEAR_FEE = BigInt(  5_000_000) * GWEI;
+
+const LARGE     = BigInt(250_000_000) * GWEI;
+const LARGE_FEE = BigInt( 12_500_000) * GWEI;
 
 contract("PIGGYBOMBS", (accts) => {
   let owner, ownerSigner;
@@ -71,12 +81,12 @@ contract("PIGGYBOMBS", (accts) => {
     }
   });
 
-  let weth;
-  it("loads WETH", async () => {
+  // let weth;
+  it.skip("loads WETH", async () => {
     const wethABI = require('./abi/WETH.json');
     // const wethArtifact = require('E:\\sites\\piggies-solidity\\artifacts\\contracts\\IERC20Rebasing.sol\\IERC20Rebasing.json');
     const wethAddress = '0x4200000000000000000000000000000000000023';
-    weth = new ethers.Contract(wethAddress, wethABI, ownerSigner);
+    const weth = new ethers.Contract(wethAddress, wethABI, ownerSigner);
   });
 
   after(() => {
@@ -94,7 +104,7 @@ contract("PIGGYBOMBS", (accts) => {
         await piggies.connect(ownerSigner).setSaleState(1);
       });
 
-      it("must approve weth", async () => {
+      it.skip("WETH: must approve", async () => {
         const signer = signers[0];
         let wethBalance = await weth.balanceOf(signer.address);
         assert.equal(wethBalance, 0);
@@ -113,10 +123,10 @@ contract("PIGGYBOMBS", (accts) => {
         }
       });
 
-      it("must have enough weth", async () => {
+      it.skip("WETH: must have enough", async () => {
         const signer = signers[0];
         // approve
-        await weth.connect(signer).approve(piggies.address, '1000000000000000000');
+        await weth.connect(signer).approve(piggies.address, BigInt(1) * ETHER);
 
         const wethBalance = await weth.balanceOf(signer.address);
         assert.equal(wethBalance, 0);
@@ -126,7 +136,7 @@ contract("PIGGYBOMBS", (accts) => {
           // console.log({proof});
 
           await piggies.connect(signer).mint(1, 1, proof);
-          assert.fail("unsifficient WETH");
+          assert.fail("unsufficient WETH");
         }
         catch(err){
           // logging.warn({ err });
@@ -134,19 +144,19 @@ contract("PIGGYBOMBS", (accts) => {
         }
       });
 
-      it("must be allowlist", async () => {
+      it.skip("WETH: must be allowlist", async () => {
         const signer = signers[10];
 
         // deposit 1 ether
         await weth.connect(signer).deposit({
-          value: '1000000000000000000'
+          value: BigInt(1) * ETHER
         });
 
         // approve
-        await weth.connect(signer).approve(piggies.address, '1000000000000000000');
+        await weth.connect(signer).approve(piggies.address, BigInt(1) * ETHER);
 
         const wethBalance = await weth.balanceOf(signer.address);
-        assert.equal(wethBalance, '1000000000000000000');
+        assert.equal(wethBalance, BigInt(1) * ETHER);
 
 
         try{
@@ -162,17 +172,39 @@ contract("PIGGYBOMBS", (accts) => {
         }
       });
 
-      it("mint nuclear", async () => {
+      it("ETH: must be allowlist", async () => {
+        const signer = signers[10];
+
+        const ethBalance = await web3client.eth.getBalance(signer.address);
+        assert.equal(ethBalance, DEFAULT_BALANCE);
+
+
+        try{
+          const proof = merkle.getProof(signer.address);
+          // console.log({proof});
+
+          await piggies.connect(signer).mint(1, 1, proof, {
+            value: NUCLEAR + NUCLEAR_FEE
+          });
+          assert.fail("not allowlisted");
+        }
+        catch(err){
+          // logging.warn({ err });
+          assert.include(String(err), "NotAuthorized()");
+        }
+      });
+
+      it.skip("WETH: mint nuclear", async () => {
         const signer = signers[0];
 
         // deposit 1 ether
         await weth.connect(signer).deposit({
-          value: '1000000000000000000'
+          value: BigInt(1) * ETHER
         });
 
 
         let wethBalance = await weth.balanceOf(signer.address);
-        assert.equal(wethBalance, '1000000000000000000');
+        assert.equal(wethBalance, BigInt(1) * ETHER);
 
         const proof = merkle.getProof(signer.address);
         // console.log({proof});
@@ -181,11 +213,34 @@ contract("PIGGYBOMBS", (accts) => {
         // let rcpt = await txn.wait();
         // logging.warn(rcpt.logs);
 
+
+        const expected = BigInt(1) * ETHER - (NUCLEAR + NUCLEAR_FEE);
         wethBalance = await weth.balanceOf(signer.address);
-        assert.equal(wethBalance, '895000000000000000');
+        assert.equal(wethBalance, expected);
       });
 
-      it("burn nuclear", async () => {
+      it("ETH: mint nuclear", async () => {
+        const signer = signers[0];
+
+
+        let ethBalance = await web3client.eth.getBalance(signer.address);
+        assert.equal(ethBalance, DEFAULT_BALANCE);
+
+        const proof = merkle.getProof(signer.address);
+        // console.log({proof});
+
+        const txn = await piggies.connect(signer).mint(1, 1, proof, {
+          value: NUCLEAR + NUCLEAR_FEE
+        });
+        // let rcpt = await txn.wait();
+        // logging.warn(rcpt.logs);
+
+        const expected = DEFAULT_BALANCE - (NUCLEAR + NUCLEAR_FEE);
+        ethBalance = await web3client.eth.getBalance(signer.address);
+        assert.isTrue(ethBalance <= expected);
+      });
+
+      it.skip("WETH: burn nuclear", async () => {
         const signer = signers[0];
         const txn = await piggies.connect(signer).burn([1]);
         // rcpt = await txn.wait();
@@ -205,7 +260,29 @@ contract("PIGGYBOMBS", (accts) => {
         }
       });
 
-      it("mint and burn nuclear 2", async () => {
+      it("ETH: burn nuclear", async () => {
+        const signer = signers[0];
+        const txn = await piggies.connect(signer).burn([1]);
+        // rcpt = await txn.wait();
+        // logging.warn(rcpt.logs);
+
+        const lessThan = DEFAULT_BALANCE - NUCLEAR_FEE;
+        const greaterThan = DEFAULT_BALANCE - (NUCLEAR + NUCLEAR_FEE);
+        let ethBalance = await web3client.eth.getBalance(signer.address);
+        assert.isTrue(ethBalance <= lessThan);
+        assert.isTrue(ethBalance > greaterThan);
+
+        try{
+          await piggies.connect(signer).burn([1]);
+          assert.fail("Can't burn twice");
+        }
+        catch(err){
+          // logging.warn({err});
+          assert.include(String(err), "ERC721NonexistentToken(1)");
+        }
+      });
+
+      it.skip("WETH: mint and burn nuclear 2", async () => {
         const signer = signers[1];
 
         // deposit 1 ether
@@ -255,10 +332,58 @@ contract("PIGGYBOMBS", (accts) => {
           assert.include(String(err), "ERC721NonexistentToken(2)");
         }
       });
+
+      it.skip("ETH: mint and burn nuclear 2", async () => {
+        const signer = signers[1];
+
+
+        let ethBalance = await web3client.eth.getBalance(signer.address);
+        assert.equal(ethBalance, '1000000000000000000');
+
+
+        try{
+          const proof = merkle.getProof(signer.address);
+          await piggies.connect(signer).mint(2, 1, proof, {
+            value: BigInt(200000000000000)
+          });
+        }
+        catch(err){
+          // logging.warn({ err });
+          assert.include(String(err), "OrderExceedsAllowance()");
+        }
+
+
+        const proof = merkle.getProof(signer.address);
+        let txn = await piggies.connect(signer).mint(1, 1, proof, {
+          value: BigInt(100000000000000)
+        });
+        // let rcpt = await txn.wait();
+        // logging.warn(rcpt.logs);
+
+        ethBalance = await web3client.eth.getBalance(signer.address);
+        assert.equal(ethBalance, '1000000000000000000');
+
+        txn = await piggies.connect(signer).burn([2]);
+        // rcpt = await txn.wait();
+        // logging.warn(rcpt.logs);
+
+        ethBalance = await web3client.eth.getBalance(signer.address);
+        assert.equal(ethBalance, '1000000000000000000');
+
+
+        try{
+          await piggies.connect(signer).burn([2]);
+          assert.fail("Can't burn twice");
+        }
+        catch(err){
+          // logging.warn({err});
+          assert.include(String(err), "ERC721NonexistentToken(2)");
+        }
+      });
     });
 
     describe("Greenfield Public", function(){
-      it("mint public", async () => {
+      it.skip("WETH: mint public", async () => {
         const signer = signers[10];
 
         // deposit 1 ether
@@ -282,11 +407,29 @@ contract("PIGGYBOMBS", (accts) => {
         }
       });
 
+      it("ETH: mint public", async () => {
+        const signer = signers[10];
+
+        try{
+          const proof = merkle.getProof(signer.address);
+          console.log({proof});
+
+          await piggies.connect(signer).mint(2, 2, proof, {
+            value: LARGE + LARGE_FEE
+          });
+          assert.fail("sales closed");
+        }
+        catch(err){
+          // logging.warn({ err });
+          assert.include(String(err), "SalesClosed(2)");
+        }
+      });
+
       it("open sales", async () => {
         await piggies.connect(ownerSigner).setSaleState(3);
       });
 
-      it("mint and burn large", async () => {
+      it.skip("WETH: mint and burn large", async () => {
         const signer = signers[2];
 
         // deposit 1 ether
@@ -325,20 +468,72 @@ contract("PIGGYBOMBS", (accts) => {
           assert.include(String(err), "ERC721NonexistentToken(1001)");
         }
       });
+
+      it("ETH: mint and burn large", async () => {
+        const signer = signers[2];
+
+        let ethBalance = await web3client.eth.getBalance(signer.address);
+        assert.equal(ethBalance, DEFAULT_BALANCE);
+
+
+        const mintValue = BigInt(1) * (LARGE + LARGE_FEE);
+        let txn = await piggies.connect(signer).mint(1, 2, [], {
+          value: mintValue
+        });
+        // let rcpt = await txn.wait();
+        // logging.warn(rcpt.logs);
+
+
+        let expected = DEFAULT_BALANCE - mintValue;
+        ethBalance = await web3client.eth.getBalance(signer.address);
+        assert.isTrue(ethBalance < expected);
+
+        txn = await piggies.connect(signer).burn([1001]);
+        // rcpt = await txn.wait();
+        // logging.warn(rcpt.logs);
+
+        const lessThan = DEFAULT_BALANCE - (BigInt(1) * LARGE_FEE);
+        ethBalance = await web3client.eth.getBalance(signer.address);
+        assert.isTrue(ethBalance <= lessThan);
+        assert.isTrue(ethBalance > mintValue);
+
+
+        try{
+          await piggies.connect(signer).burn([1001]);
+          assert.fail("Can't burn twice");
+        }
+        catch(err){
+          // logging.warn({err});
+          assert.include(String(err), "ERC721NonexistentToken(1001)");
+        }
+      });
     });
 
     describe("Withdraw", function(){
-      it("can withdraw WETH", async () => {
+      it.skip("WETH: can withdraw", async () => {
         let wethBalance = await weth.balanceOf(piggies.address);
         assert.equal(wethBalance, '22500000000000000');
-  
+
         await piggies.connect(ownerSigner).withdrawWETH(accounts[15]);
-  
+
         wethBalance = await weth.balanceOf(piggies.address);
         assert.equal(wethBalance, '0');
   
         wethBalance = await weth.balanceOf(accounts[15]);
         assert.equal(wethBalance, '22500000000000000');
+      });
+
+      it("ETH: can withdraw", async () => {
+        let ethBalance = await web3client.eth.getBalance(piggies.address);
+        assert.equal(ethBalance, '17500000000000000');
+  
+        await piggies.connect(ownerSigner).withdraw(accounts[15]);
+  
+        ethBalance = await web3client.eth.getBalance(piggies.address);
+        assert.equal(ethBalance, '0');
+  
+        ethBalance = await web3client.eth.getBalance(accounts[15]);
+        assert.equal(ethBalance, '10000017500000000000000');
       });
     });
   });

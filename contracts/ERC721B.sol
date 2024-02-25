@@ -41,6 +41,8 @@ struct TokenRange{
 
 
 abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata, IERC721Errors {
+  event Blast(address indexed from, uint16 indexed tokenId, uint32 burnTS, uint32 duration);
+
   TokenRange public range = TokenRange(
     1,
     1001,
@@ -166,17 +168,19 @@ abstract contract ERC721B is Context, ERC165, IERC721, IERC721Metadata, IERC721E
     // Clear approvals from the previous owner
     delete _tokenApprovals[tokenId];
 
+    uint32 burnTS = uint32(block.timestamp);
     Token memory prev = tokens[tokenId];
     tokens[tokenId] = Token(
       prev.value,
       address(0),
       prev.mintTS,
-      uint32(block.timestamp),
+      burnTS,
       prev.tokenType
     );
 
     tokens[tokenId].owner = address(0);
     emit Transfer(from, address(0), tokenId);
+    emit Blast(from, uint16(tokenId), burnTS, burnTS - prev.mintTS);
   }
 
   function _burnFrom(address from, uint256 tokenId) internal {
