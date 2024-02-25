@@ -22,7 +22,7 @@ const NUCLEAR_FEE = BigInt(  5_000_000) * GWEI;
 const LARGE     = BigInt(250_000_000) * GWEI;
 const LARGE_FEE = BigInt( 12_500_000) * GWEI;
 
-contract("PIGGYBOMBS", (accts) => {
+contract("PIGGYBOMB", (accts) => {
   let owner, ownerSigner;
   const accounts = [];
   const signers = [];
@@ -70,11 +70,11 @@ contract("PIGGYBOMBS", (accts) => {
   });
 
   let piggies;
-  it("deploys PIGGYBOMBS", async () => {
+  it("deploys PIGGYBOMB", async () => {
     try{
-      const PIGGYBOMBS = await ethers.getContractFactory("PIGGYBOMBS");
-      piggies = await PIGGYBOMBS.deploy();
-      logging.info('\tINFO: PIGGYBOMBS.address', piggies.address);
+      const PIGGYBOMB = await ethers.getContractFactory("PIGGYBOMB");
+      piggies = await PIGGYBOMB.deploy();
+      logging.info('\tINFO: PIGGYBOMB.address', piggies.address);
     }
     catch(err){
       console.warn({err});
@@ -91,7 +91,7 @@ contract("PIGGYBOMBS", (accts) => {
 
   after(() => {
     if(!piggies)
-      assert.fail("PIGGYBOMBS (PIGGYBOMBS) not deployed");
+      assert.fail("PIGGYBOMB (PIGGYBOMB) not deployed");
 
 
     describe("Greenfield Allowlist", function(){

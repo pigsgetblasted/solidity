@@ -19,7 +19,7 @@ enum SaleState {
   BOTH
 }
 
-contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
+contract PIGGYBOMB is ERC721EnumerableB, Merkle2{
   error InvalidPayment();
   error InvalidPriceCount();
   error NotAuthorized();
@@ -48,7 +48,7 @@ contract PIGGYBOMBS is ERC721EnumerableB, Merkle2{
   ERC721B("PIGS GET BLASTED", "PIGGYBOMB")
   {
     BLAST.configureClaimableGas();
-    // BLAST.configureClaimableYield();
+    BLAST.configureClaimableYield();
 
     prices[TokenType.NUCLEAR] = 0.10 ether;
     prices[TokenType.LARGE]   = 0.25 ether;

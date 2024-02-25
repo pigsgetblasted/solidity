@@ -40,19 +40,6 @@ module.exports = {
       },
     },
 
-    goerli: {
-      url: `https://goerli.infura.io/v3/${env.INFURA.PROJECT_ID}`,
-      accounts: []
-    },
-
-    sepolia: {
-      url: `https://sepolia.infura.io/v3/${env.INFURA.PROJECT_ID}`,
-      accounts: [
-        env.ACCOUNTS.BLAST_PIGGIES.PK,
-        // ...accounts.slice(2).map(acct => acct.privateKey)
-      ]
-    },
-
     "blast-mainnet": {
       url: ``,
       accounts: [
