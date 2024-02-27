@@ -3,6 +3,7 @@
 pragma solidity ^0.8.15;
 
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {ERC721, ERC721Enumerable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 
@@ -29,7 +30,7 @@ enum TokenType {
 }
 
 struct ConfigData {
-  uint256 burned;
+  uint256 totalBurned;
   uint16 feePercent;
   SaleState saleState;
   uint256 totalSupply;
@@ -58,7 +59,7 @@ struct TokenRange{
   uint16 minted;
 }
 
-contract PIGGYBOMB is ERC721Enumerable, Merkle2{
+contract PIGGYBOMB is ERC721Enumerable, Merkle2, ReentrancyGuard{
   error InvalidPayment();
   error InvalidPriceCount();
   error NotAuthorized();
@@ -76,26 +77,20 @@ contract PIGGYBOMB is ERC721Enumerable, Merkle2{
   IBlastPoints public BLAST_POINTS;
   uint16 public constant MAX_NUKES = 1000;
 
-  uint16 public burned = 0;
   uint16 public feePercent = 5;
   uint256 public mintFees = 0;
   uint16 public nextNuke = 1;
   uint16 public nextPiggy = 1001;
   uint16 public nukeLimit = 1;
   SaleState public saleState = SaleState.NONE;
+  uint16 public totalBurned = 0;
   string public tokenURIPrefix = "";
   string public tokenURISuffix = "";
 
+  mapping(address => uint16[]) public burned;
   mapping(address => Owner) public owners;
   mapping(TokenType => uint256) public prices;
   mapping(uint256 => Token) public tokens;
-  TokenRange public range = TokenRange(
-    1,
-    1001,
-    0,
-    0
-  );
-
 
   constructor(address _blastContract, address _pointsContract, address _pointsOperator)
   ERC721("PIGS GET BLASTED", "PIGGYBOMB")
@@ -120,15 +115,21 @@ contract PIGGYBOMB is ERC721Enumerable, Merkle2{
     mintFees += msg.value;
   }
 
-  function burn(uint16[] calldata tokenIds) external {
-    uint256 tokenId;
-    uint256 totalValue = 0;
-    uint32 burnTS = uint32(block.timestamp);
+  function burn(uint16[] calldata tokenIds) external nonReentrant {
+    uint16 tokenId;
     uint256 count = tokenIds.length;
+    uint32 burnTS = uint32(block.timestamp);
+
+    totalBurned += uint16(count);
+    owners[msg.sender].burned += uint16(count);
+
+    // validate and calculate
+    uint256 totalValue = 0;
     for(uint256 i = 0; i < count; ++i) {
       tokenId = tokenIds[i];
       if (ownerOf(tokenId) == msg.sender) {
-        ++burned;
+        burned[msg.sender].push(tokenId);
+
         Token memory token = tokens[tokenId];
         totalValue += token.value;
         tokens[tokenId].burnTS = burnTS;
@@ -140,7 +141,7 @@ contract PIGGYBOMB is ERC721Enumerable, Merkle2{
           token.tokenType,
           burnTS,
           burnTS - token.mintTS
-        );        
+        );
       }
       else {
         revert ERC721InvalidOwner(msg.sender);
@@ -258,11 +259,11 @@ contract PIGGYBOMB is ERC721Enumerable, Merkle2{
     tokenURISuffix = suffix;
   }
 
-  function withdrawFees(address payable to) external onlyOwner {
+  function withdrawFees(address payable to) external nonReentrant onlyOwner {
     if(mintFees > 0) {
-      uint256 sendValue = mintFees;
+      uint256 value = mintFees;
       mintFees = 0;
-      Address.sendValue(to, sendValue);
+      Address.sendValue(to, value);
     }
     else
       revert NoBalance();
@@ -295,7 +296,7 @@ contract PIGGYBOMB is ERC721Enumerable, Merkle2{
     priceArray[3] = prices[TokenType.MEDIUM];
     priceArray[4] = prices[TokenType.SMALL];
     ConfigData memory data = ConfigData(
-      burned,
+      totalBurned,
       feePercent,
       saleState,
       totalSupply(),
@@ -318,5 +319,32 @@ contract PIGGYBOMB is ERC721Enumerable, Merkle2{
   function tokenURI(uint256 tokenId) public override view returns(string memory){
     _requireOwned(tokenId);
     return string.concat(tokenURIPrefix, Strings.toString(uint8(tokens[tokenId].tokenType)), tokenURISuffix);
+  }
+
+  function tokensOfOwner(address owner, uint256 limit, uint256 startIdx) public view returns (uint256[] memory) {
+    uint256 endIdx = balanceOf(owner);
+    if (limit != 0 && startIdx + limit < endIdx) {
+      endIdx = startIdx + limit;
+    }
+
+    uint256[] memory tokenIds = new uint256[](endIdx - startIdx);
+    for (uint256 i = startIdx; i < endIdx; ++i) {
+      tokenIds[i] = tokenOfOwnerByIndex(owner, i);
+    }
+    return tokenIds;
+  }
+
+  function burnedOfOwner(address owner, uint256 limit, uint256 startIdx) public view returns (uint256[] memory) {
+    uint16[] memory burnedTokenIds = burned[owner];
+    uint256 endIdx = burnedTokenIds.length;
+    if (limit != 0 && startIdx + limit < endIdx) {
+      endIdx = startIdx + limit;
+    }
+
+    uint256[] memory tokenIds = new uint256[](endIdx - startIdx);
+    for (uint256 i = startIdx; i < endIdx; ++i) {
+      tokenIds[i] = burnedTokenIds[i];
+    }
+    return tokenIds;
   }
 }
