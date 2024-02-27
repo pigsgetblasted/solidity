@@ -1,0 +1,17 @@
+[2024-02-27T06:41:28.222] [INFO] index.ts - Require contract 'PIGGYBOMB'...
+[2024-02-27T06:41:28.228] [INFO] index.ts - 1) Saving 2024-02-27/064128_PIGGYBOMB/verify.json...
+[2024-02-27T06:41:28.257] [INFO] index.ts - 2) Saving 2024-02-27/064128_PIGGYBOMB/PIGGYBOMB-abi.json...
+[2024-02-27T06:41:28.259] [INFO] index.ts - 3) Deploying PIGGYBOMB( 0x2fc95838c71e76ec69ff817983BFf17c710F34E0 ) to network 'blast-sepolia'...
+[2024-02-27T06:41:33.586] [INFO] index.ts - 4) Waiting for confirmation...
+[2024-02-27T06:41:33.713] [INFO] index.ts - ...contract 'PIGGYBOMB' deployed to address '0x9558EB5FFc6235220D26dB35dACCd41072D7Ce20'!
+{
+  receipt: {
+    blockNumber: 2177302,
+    transactionIndex: 29,
+    transactionHash: '0x323fec9c43e0434398007d1cecf949e86792f1b453e41549354709cdd2973e68',
+    from: '0xC0Bd88053C966D3Df0fC5B8e309856C37E3793fc',
+    to: null,
+    contractAddress: '0x9558EB5FFc6235220D26dB35dACCd41072D7Ce20',
+    gasUsed: BigNumber { value: "3498190" }
+  }
+}

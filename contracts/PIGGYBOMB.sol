@@ -6,7 +6,7 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 import {IBlast} from "./IBlast.sol";
-// import {IERC20Rebasing, YieldMode} from "./IERC20Rebasing.sol";
+import {IBlastPoints} from "./IBlastPoints.sol";
 
 import {ERC721B, Token, TokenType} from "./ERC721B.sol";
 import {ERC721EnumerableB} from "./ERC721EnumerableB.sol";
@@ -42,6 +42,7 @@ contract PIGGYBOMB is ERC721EnumerableB, Merkle2{
 
   uint16 public constant MAX_NUKES = 1000;
   IBlast public constant BLAST = IBlast(0x4300000000000000000000000000000000000002);
+  IBlastPoints public BLAST_POINTS;
 
   uint16 public feePercent = 5;
   uint16 public nextNuke = 1;
@@ -51,16 +52,21 @@ contract PIGGYBOMB is ERC721EnumerableB, Merkle2{
   string public tokenURISuffix;
   uint256 public totalFees;
 
-  constructor()
+  constructor(address _pointsContract)
   ERC721B("PIGS GET BLASTED", "PIGGYBOMB")
   {
     BLAST.configureClaimableGas();
     BLAST.configureClaimableYield();
+    setBlastPointsConfig(_pointsContract, 0xDa63245ee0Cf1f3C8E46C35A72e6C42836E24c8A);
 
     prices[TokenType.NUCLEAR] = 0.10 ether;
     prices[TokenType.LARGE]   = 0.25 ether;
     prices[TokenType.MEDIUM]  = 0.10 ether;
     prices[TokenType.SMALL]   = 0.03 ether;
+  }
+
+  receive() external payable onlyEOADelegates {
+    totalFees += msg.value;
   }
 
   function burn(uint16[] calldata tokenIds) external {
@@ -121,6 +127,11 @@ contract PIGGYBOMB is ERC721EnumerableB, Merkle2{
 
 
   // onlyDelegates
+  function setBlastPointsConfig(address _contract, address operator) public {
+    BLAST_POINTS = IBlastPoints(_contract); 
+    BLAST_POINTS.configurePointsOperator(operator);
+  }
+
   function setFeePercent(uint16 _pct) external onlyEOADelegates {
     feePercent = _pct;
   }
