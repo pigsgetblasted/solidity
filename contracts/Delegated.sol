@@ -3,7 +3,6 @@
 pragma solidity ^0.8.9;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 contract Delegated is Ownable{
   error NotEOA();

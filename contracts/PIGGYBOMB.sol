@@ -1,16 +1,32 @@
 
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.15;
 
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+import {ERC721, ERC721Enumerable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 
 import {IBlast} from "./IBlast.sol";
 import {IBlastPoints} from "./IBlastPoints.sol";
 
-import {ERC721B, Token, TokenType} from "./ERC721B.sol";
-import {ERC721EnumerableB} from "./ERC721EnumerableB.sol";
+// import {ERC721B, Token, TokenType} from "./ERC721B.sol";
+// import {ERC721Batch} from "./ERC721Batch.sol";
 import {Merkle2} from "./Merkle2.sol";
+
+enum SaleState {
+  NONE,
+  ALLOWLIST,
+  PUBLIC,
+  BOTH
+}
+
+enum TokenType {
+  NONE,
+  NUCLEAR,
+  LARGE,
+  MEDIUM,
+  SMALL
+}
 
 struct ConfigData {
   uint256 burned;
@@ -21,14 +37,28 @@ struct ConfigData {
   uint256[] prices;
 }
 
-enum SaleState {
-  NONE,
-  ALLOWLIST,
-  PUBLIC,
-  BOTH
+struct Owner{
+  uint16 balance;
+  uint16 burned;
+  uint16 nuclear;
 }
 
-contract PIGGYBOMB is ERC721EnumerableB, Merkle2{
+struct Token{
+  uint256 value;
+  address owner; //160
+  uint32 mintTS;
+  uint32 burnTS;
+  TokenType tokenType;
+}
+
+struct TokenRange{
+  uint16 lower;
+  uint16 current;
+  uint16 upper;
+  uint16 minted;
+}
+
+contract PIGGYBOMB is ERC721Enumerable, Merkle2{
   error InvalidPayment();
   error InvalidPriceCount();
   error NotAuthorized();
@@ -40,24 +70,45 @@ contract PIGGYBOMB is ERC721EnumerableB, Merkle2{
   error UnsupportedTokenType(uint8);
   error WithdrawError(bytes);
 
-  uint16 public constant MAX_NUKES = 1000;
-  IBlast public constant BLAST = IBlast(0x4300000000000000000000000000000000000002);
-  IBlastPoints public BLAST_POINTS;
+  event Blast(address indexed from, uint16 indexed tokenId, TokenType indexed tokenType, uint32 burnTS, uint32 duration);
 
+  IBlast public BLAST;
+  IBlastPoints public BLAST_POINTS;
+  uint16 public constant MAX_NUKES = 1000;
+
+  uint16 public burned = 0;
   uint16 public feePercent = 5;
+  uint256 public mintFees = 0;
   uint16 public nextNuke = 1;
+  uint16 public nextPiggy = 1001;
   uint16 public nukeLimit = 1;
   SaleState public saleState = SaleState.NONE;
-  string public tokenURIPrefix;
-  string public tokenURISuffix;
-  uint256 public totalFees;
+  string public tokenURIPrefix = "";
+  string public tokenURISuffix = "";
 
-  constructor(address _pointsContract)
-  ERC721B("PIGS GET BLASTED", "PIGGYBOMB")
+  mapping(address => Owner) public owners;
+  mapping(TokenType => uint256) public prices;
+  mapping(uint256 => Token) public tokens;
+  TokenRange public range = TokenRange(
+    1,
+    1001,
+    0,
+    0
+  );
+
+
+  constructor(address _blastContract, address _pointsContract, address _pointsOperator)
+  ERC721("PIGS GET BLASTED", "PIGGYBOMB")
   {
-    BLAST.configureClaimableGas();
-    BLAST.configureClaimableYield();
-    setBlastPointsConfig(_pointsContract, 0xDa63245ee0Cf1f3C8E46C35A72e6C42836E24c8A);
+    if (_blastContract != address(0)) {
+      BLAST = IBlast(_blastContract);
+      BLAST.configureClaimableGas();
+      BLAST.configureClaimableYield();
+    }
+
+    if (_pointsContract != address(0)) {
+      setBlastPointsConfig(_pointsContract, _pointsOperator);
+    }
 
     prices[TokenType.NUCLEAR] = 0.10 ether;
     prices[TokenType.LARGE]   = 0.25 ether;
@@ -66,15 +117,34 @@ contract PIGGYBOMB is ERC721EnumerableB, Merkle2{
   }
 
   receive() external payable onlyEOADelegates {
-    totalFees += msg.value;
+    mintFees += msg.value;
   }
 
   function burn(uint16[] calldata tokenIds) external {
+    uint256 tokenId;
     uint256 totalValue = 0;
+    uint32 burnTS = uint32(block.timestamp);
     uint256 count = tokenIds.length;
     for(uint256 i = 0; i < count; ++i) {
-      totalValue += tokens[tokenIds[i]].value;
-      _burnFrom(msg.sender, tokenIds[i]);
+      tokenId = tokenIds[i];
+      if (ownerOf(tokenId) == msg.sender) {
+        ++burned;
+        Token memory token = tokens[tokenId];
+        totalValue += token.value;
+        tokens[tokenId].burnTS = burnTS;
+
+        _burn(tokenId);
+        emit Blast(
+          msg.sender,
+          uint16(tokenId),
+          token.tokenType,
+          burnTS,
+          burnTS - token.mintTS
+        );        
+      }
+      else {
+        revert ERC721InvalidOwner(msg.sender);
+      }
     }
 
     Address.sendValue(payable(msg.sender), totalValue);
@@ -87,7 +157,12 @@ contract PIGGYBOMB is ERC721EnumerableB, Merkle2{
     if (tokenType == TokenType.NONE || uint8(tokenType) >= 5)
       revert UnsupportedTokenType(uint8(tokenType));
 
-    uint256 totalPrice = prices[tokenType] * quantity;
+
+    uint256 firstTokenId;
+    uint16 nukeQuantity = 0;
+    Owner memory prev = owners[msg.sender];
+    uint256 priceEach = prices[tokenType];
+    uint256 totalPrice = priceEach * quantity;
     uint256 totalFee = totalPrice * 5 / 100;
     uint256 totalValue = totalPrice + totalFee;
     if (tokenType == TokenType.NUCLEAR) {
@@ -107,11 +182,10 @@ contract PIGGYBOMB is ERC721EnumerableB, Merkle2{
       if(!_isValidProof(leaf, proof))
         revert NotAuthorized();
 
-      uint16 firstTokenId = nextNuke;
 
+      firstTokenId = nextNuke;
       nextNuke += quantity;
-      totalFees += totalFees;
-      _mintSequential(quantity, tokenType, msg.sender, firstTokenId);
+      nukeQuantity = quantity;
     }
     else {
       if (!(saleState == SaleState.PUBLIC || saleState == SaleState.BOTH))
@@ -120,16 +194,36 @@ contract PIGGYBOMB is ERC721EnumerableB, Merkle2{
       if (msg.value != totalValue)
         revert InvalidPayment();
 
-      totalFees += totalFees;
-      _mintSequential(quantity, tokenType, msg.sender, range.current);
+
+      firstTokenId = nextPiggy;
+      nextPiggy += quantity;
+    }
+
+
+    mintFees += totalFee;
+    owners[msg.sender] = Owner(
+      prev.balance + quantity,
+      prev.burned,
+      prev.nuclear + nukeQuantity
+    );
+
+    for(uint256 i = 0; i < quantity; ++i){
+      _mint(msg.sender, firstTokenId + i);
+      tokens[firstTokenId + i] = Token(
+        priceEach,
+        msg.sender,
+        uint32(block.timestamp),
+        0,
+        tokenType
+      );
     }
   }
 
 
   // onlyDelegates
-  function setBlastPointsConfig(address _contract, address operator) public {
-    BLAST_POINTS = IBlastPoints(_contract); 
-    BLAST_POINTS.configurePointsOperator(operator);
+  function setBlastPointsConfig(address _pointsContract, address _pointsOperator) public {
+    BLAST_POINTS = IBlastPoints(_pointsContract); 
+    BLAST_POINTS.configurePointsOperator(_pointsOperator);
   }
 
   function setFeePercent(uint16 _pct) external onlyEOADelegates {
@@ -165,9 +259,9 @@ contract PIGGYBOMB is ERC721EnumerableB, Merkle2{
   }
 
   function withdrawFees(address payable to) external onlyOwner {
-    if(totalFees > 0) {
-      uint256 sendValue = totalFees;
-      totalFees = 0;
+    if(mintFees > 0) {
+      uint256 sendValue = mintFees;
+      mintFees = 0;
       Address.sendValue(to, sendValue);
     }
     else
@@ -201,7 +295,7 @@ contract PIGGYBOMB is ERC721EnumerableB, Merkle2{
     priceArray[3] = prices[TokenType.MEDIUM];
     priceArray[4] = prices[TokenType.SMALL];
     ConfigData memory data = ConfigData(
-      burned(),
+      burned,
       feePercent,
       saleState,
       totalSupply(),
@@ -212,12 +306,17 @@ contract PIGGYBOMB is ERC721EnumerableB, Merkle2{
     return data;
   }
 
-  function tokenURI(uint256 tokenId) public override view returns(string memory){
-    if(_exists(tokenId)) {
-      Token memory token = tokens[tokenId];
-      return string.concat(tokenURIPrefix, Strings.toString(uint8(token.tokenType)), tokenURISuffix);
+  function getTokens(uint256[] calldata tokenIds) external view returns (Token[] memory) {
+    uint256 count = tokenIds.length;
+    Token[] memory result = new Token[](count);
+    for(uint256 i = 0; i < count; ++i){
+      result[i] = tokens[tokenIds[i]];
     }
-    else
-      revert ERC721NonexistentToken(tokenId);
+    return result;
+  }
+
+  function tokenURI(uint256 tokenId) public override view returns(string memory){
+    _requireOwned(tokenId);
+    return string.concat(tokenURIPrefix, Strings.toString(uint8(tokens[tokenId].tokenType)), tokenURISuffix);
   }
 }

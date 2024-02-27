@@ -35,7 +35,7 @@ module.exports = {
     hardhat: {
       // accounts: accounts,
       forking: {
-        enabled: true,
+        enabled: false,
         url: `https://sepolia.blast.io`
       },
     },

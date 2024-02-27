@@ -73,7 +73,11 @@ contract("PIGGYBOMB", (accts) => {
   it("deploys PIGGYBOMB", async () => {
     try{
       const PIGGYBOMB = await ethers.getContractFactory("PIGGYBOMB");
-      piggies = await PIGGYBOMB.deploy();
+      piggies = await PIGGYBOMB.deploy(
+        "0x0000000000000000000000000000000000000000",
+        "0x0000000000000000000000000000000000000000",
+        "0xDa63245ee0Cf1f3C8E46C35A72e6C42836E24c8A"
+      );
       logging.info('\tINFO: PIGGYBOMB.address', piggies.address);
     }
     catch(err){
@@ -527,7 +531,7 @@ contract("PIGGYBOMB", (accts) => {
         let ethBalance = await web3client.eth.getBalance(piggies.address);
         assert.equal(ethBalance, '17500000000000000');
   
-        await piggies.connect(ownerSigner).withdraw(accounts[15]);
+        await piggies.connect(ownerSigner).withdrawFees(accounts[15]);
   
         ethBalance = await web3client.eth.getBalance(piggies.address);
         assert.equal(ethBalance, '0');
