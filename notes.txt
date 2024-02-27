@@ -3,6 +3,11 @@ yarn hardhat test [./test/test-something.js]
 yarn hardhat coverage
 yarn hardhat run ./scripts/deploy.js --network blast-sepolia
 
+PIGGYBOMB
+1) 0x4300000000000000000000000000000000000002
+2) 0x2fc95838c71e76ec69ff817983BFf17c710F34E0
+3) 0xDa63245ee0Cf1f3C8E46C35A72e6C42836E24c8A
+
 
 yarn hardhat run ./scripts/deploy.js --network blast-mainnet
 PIGGYBOMB
