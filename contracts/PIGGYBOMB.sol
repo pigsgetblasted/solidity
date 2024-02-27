@@ -12,6 +12,15 @@ import {ERC721B, Token, TokenType} from "./ERC721B.sol";
 import {ERC721EnumerableB} from "./ERC721EnumerableB.sol";
 import {Merkle2} from "./Merkle2.sol";
 
+struct ConfigData {
+  uint256 burned;
+  uint16 feePercent;
+  SaleState saleState;
+  uint256 totalSupply;
+
+  uint256[] prices;
+}
+
 enum SaleState {
   NONE,
   ALLOWLIST,
@@ -40,9 +49,7 @@ contract PIGGYBOMB is ERC721EnumerableB, Merkle2{
   SaleState public saleState = SaleState.NONE;
   string public tokenURIPrefix;
   string public tokenURISuffix;
-
-
-  // TODO: enable / disable mint
+  uint256 public totalFees;
 
   constructor()
   ERC721B("PIGS GET BLASTED", "PIGGYBOMB")
@@ -97,7 +104,7 @@ contract PIGGYBOMB is ERC721EnumerableB, Merkle2{
       uint16 firstTokenId = nextNuke;
 
       nextNuke += quantity;
-
+      totalFees += totalFees;
       _mintSequential(quantity, tokenType, msg.sender, firstTokenId);
     }
     else {
@@ -107,6 +114,7 @@ contract PIGGYBOMB is ERC721EnumerableB, Merkle2{
       if (msg.value != totalValue)
         revert InvalidPayment();
 
+      totalFees += totalFees;
       _mintSequential(quantity, tokenType, msg.sender, range.current);
     }
   }
@@ -145,10 +153,12 @@ contract PIGGYBOMB is ERC721EnumerableB, Merkle2{
     tokenURISuffix = suffix;
   }
 
-  function withdraw(address payable to) external onlyOwner {
-    uint256 amount = address(this).balance;
-    if(amount > 0)
-      Address.sendValue(to, amount);
+  function withdrawFees(address payable to) external onlyOwner {
+    if(totalFees > 0) {
+      uint256 sendValue = totalFees;
+      totalFees = 0;
+      Address.sendValue(to, sendValue);
+    }
     else
       revert NoBalance();
   }
@@ -171,6 +181,24 @@ contract PIGGYBOMB is ERC721EnumerableB, Merkle2{
     uint256 etherBalance;
     (, etherBalance, , ) = BLAST.readGasParams(address(this));
     return etherBalance;
+  }
+
+  function getConfig() external view returns (ConfigData memory) {
+    uint256[] memory priceArray = new uint256[](5);
+    priceArray[1] = prices[TokenType.NUCLEAR];
+    priceArray[2] = prices[TokenType.LARGE];
+    priceArray[3] = prices[TokenType.MEDIUM];
+    priceArray[4] = prices[TokenType.SMALL];
+    ConfigData memory data = ConfigData(
+      burned(),
+      feePercent,
+      saleState,
+      totalSupply(),
+
+      priceArray
+    );
+
+    return data;
   }
 
   function tokenURI(uint256 tokenId) public override view returns(string memory){
