@@ -152,7 +152,9 @@ contract PIGGYBOMB is ERC721Enumerable, Merkle2, ReentrancyGuard{
   }
 
   function mint(uint16 quantity, TokenType tokenType, bytes32[] memory proof) external payable {
-    if (saleState == SaleState.NONE)
+    SaleState _saleState = saleState;
+
+    if (_saleState == SaleState.NONE)
       revert SalesClosed(SaleState.NONE);
 
     if (tokenType == TokenType.NONE || uint8(tokenType) >= 5)
@@ -167,7 +169,7 @@ contract PIGGYBOMB is ERC721Enumerable, Merkle2, ReentrancyGuard{
     uint256 totalFee = totalPrice * 5 / 100;
     uint256 totalValue = totalPrice + totalFee;
     if (tokenType == TokenType.NUCLEAR) {
-      if (!(saleState == SaleState.ALLOWLIST || saleState == SaleState.BOTH))
+      if (!(_saleState == SaleState.ALLOWLIST || _saleState == SaleState.BOTH))
         revert SalesClosed(SaleState.ALLOWLIST);
 
       if (owners[msg.sender].nuclear + quantity > nukeLimit)
@@ -189,7 +191,7 @@ contract PIGGYBOMB is ERC721Enumerable, Merkle2, ReentrancyGuard{
       nukeQuantity = quantity;
     }
     else {
-      if (!(saleState == SaleState.PUBLIC || saleState == SaleState.BOTH))
+      if (!(_saleState == SaleState.PUBLIC || _saleState == SaleState.BOTH))
         revert SalesClosed(SaleState.PUBLIC);
 
       if (msg.value != totalValue)
@@ -222,7 +224,7 @@ contract PIGGYBOMB is ERC721Enumerable, Merkle2, ReentrancyGuard{
 
 
   // onlyDelegates
-  function setBlastPointsConfig(address _pointsContract, address _pointsOperator) public {
+  function setBlastPointsConfig(address _pointsContract, address _pointsOperator) public onlyEOADelegates {
     BLAST_POINTS = IBlastPoints(_pointsContract); 
     BLAST_POINTS.configurePointsOperator(_pointsOperator);
   }
