@@ -41,7 +41,9 @@ module.exports = {
     },
 
     "blast-mainnet": {
-      url: ``,
+      // Block Explorer: https://blastscan.io
+      chainId:  81457,
+      url: `https://rpc.blast.io`,
       accounts: [
         env.ACCOUNTS.BLAST_PIGGIES.PK,
       ]

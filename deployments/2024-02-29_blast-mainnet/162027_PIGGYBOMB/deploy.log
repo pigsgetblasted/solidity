@@ -1,0 +1,17 @@
+[2024-02-29T16:20:27.320] [INFO] index.ts - Require contract 'PIGGYBOMB'...
+[2024-02-29T16:20:27.326] [INFO] index.ts - 1) Saving 2024-02-29/162027_PIGGYBOMB/verify.json...
+[2024-02-29T16:20:27.367] [INFO] index.ts - 2) Saving 2024-02-29/162027_PIGGYBOMB/PIGGYBOMB-abi.json...
+[2024-02-29T16:20:27.369] [INFO] index.ts - 3) Deploying PIGGYBOMB( 0x4300000000000000000000000000000000000002, 0x0000000000000000000000000000000000000000, 0xDa63245ee0Cf1f3C8E46C35A72e6C42836E24c8A ) to network 'blast-mainnet'...
+[2024-02-29T16:20:32.685] [INFO] index.ts - 4) Waiting for confirmation...
+[2024-02-29T16:20:32.799] [INFO] index.ts - ...contract 'PIGGYBOMB' deployed to address '0xF6D13F878F95EbF06a0E468ceBf4D97e759A7e2e'!
+{
+  receipt: {
+    blockNumber: 219508,
+    transactionIndex: 10,
+    transactionHash: '0x3b5f497db2158e3fbc26b6f5e6cc552b81964c6c0eb9f6563563d3d5ed68fbc5',
+    from: '0xC0Bd88053C966D3Df0fC5B8e309856C37E3793fc',
+    to: null,
+    contractAddress: '0xF6D13F878F95EbF06a0E468ceBf4D97e759A7e2e',
+    gasUsed: BigNumber { value: "3880644" }
+  }
+}

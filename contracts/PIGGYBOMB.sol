@@ -10,8 +10,6 @@ import {ERC721, ERC721Enumerable} from "@openzeppelin/contracts/token/ERC721/ext
 import {IBlast} from "./IBlast.sol";
 import {IBlastPoints} from "./IBlastPoints.sol";
 
-// import {ERC721B, Token, TokenType} from "./ERC721B.sol";
-// import {ERC721Batch} from "./ERC721Batch.sol";
 import {Merkle2} from "./Merkle2.sol";
 
 enum SaleState {
@@ -72,6 +70,7 @@ contract PIGGYBOMB is ERC721Enumerable, Merkle2, ReentrancyGuard{
   error WithdrawError(bytes);
 
   event Blast(address indexed from, uint16 indexed tokenId, TokenType indexed tokenType, uint32 burnTS, uint32 duration);
+  event Mint(address indexed to, uint16 indexed tokenId, TokenType indexed tokenType);
 
   IBlast public BLAST;
   IBlastPoints public BLAST_POINTS;
@@ -161,7 +160,7 @@ contract PIGGYBOMB is ERC721Enumerable, Merkle2, ReentrancyGuard{
       revert UnsupportedTokenType(uint8(tokenType));
 
 
-    uint256 firstTokenId;
+    uint16 firstTokenId;
     uint16 nukeQuantity = 0;
     Owner memory prev = owners[msg.sender];
     uint256 priceEach = prices[tokenType];
@@ -210,8 +209,9 @@ contract PIGGYBOMB is ERC721Enumerable, Merkle2, ReentrancyGuard{
       prev.nuclear + nukeQuantity
     );
 
-    for(uint256 i = 0; i < quantity; ++i){
+    for(uint16 i = 0; i < quantity; ++i){
       _mint(msg.sender, firstTokenId + i);
+      emit Mint(msg.sender, firstTokenId + i, tokenType);
       tokens[firstTokenId + i] = Token(
         priceEach,
         msg.sender,
